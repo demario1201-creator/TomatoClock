@@ -1,0 +1,375 @@
+/* ---------- 主题变量 ---------- */
+/*
+  两套主题只换变量，不换选择器结构：data-theme 挂在 <html> 上（由内联脚本
+  在首屏前写好），阶段色仍由 body 上的 is-focus / is-rest 决定，两者正交。
+*/
+:root {
+  color-scheme: dark;
+
+  --ring-size: min(72vw, 340px);
+  --ring-w: 14px;
+
+  --fg: #f3f4f6;
+  --fg-dim: #9aa1ad;
+  --surface: #191d24;
+  --border: #2a3038;
+  --panel-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+
+  --bg-fallback: #08080a;
+  --bg-focus-in: #201510;
+  --bg-focus-mid: #120e0b;
+  --bg-focus-out: #08080a;
+  --bg-rest-in: #16331f;
+  --bg-rest-mid: #0c1a13;
+  --bg-rest-out: #060d09;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --fg: #232833;
+  --fg-dim: #6b7280;
+  --surface: #ffffff;
+  --border: #e3e6ec;
+  --panel-shadow: 0 12px 32px rgba(23, 32, 51, 0.14);
+
+  --bg-fallback: #f5f7fa;
+  --bg-focus-in: #ffefe0;
+  --bg-focus-mid: #fdf6ef;
+  --bg-focus-out: #f4f6fa;
+  --bg-rest-in: #e3f6ea;
+  --bg-rest-mid: #eff9f3;
+  --bg-rest-out: #f4f7fa;
+}
+
+/* 专注：暖色环绕渐变 */
+body.is-focus {
+  --ring-c1: #fb923c;
+  --ring-c2: #f43f5e;
+  --ring-c3: #fbbf24;
+  --accent: #fb923c;
+  --accent-soft: rgba(251, 146, 60, 0.16);
+}
+
+/* 休息：冷色环绕渐变 */
+body.is-rest {
+  --ring-c1: #22d3ee;
+  --ring-c2: #6366f1;
+  --ring-c3: #34d399;
+  --accent: #22d3ee;
+  --accent-soft: rgba(34, 211, 238, 0.16);
+}
+
+/*
+  浅色下把环绕渐变换成同色系的深一档：原来的亮色是给深底提亮用的，
+  铺在浅底上会糊成一片，也撑不起按钮/文字的对比度。
+*/
+:root[data-theme='light'] body.is-focus {
+  --ring-c1: #f97316;
+  --ring-c2: #e11d48;
+  --ring-c3: #f59e0b;
+  --accent: #ea580c;
+  --accent-soft: rgba(234, 88, 12, 0.12);
+}
+
+:root[data-theme='light'] body.is-rest {
+  --ring-c1: #06b6d4;
+  --ring-c2: #4f46e5;
+  --ring-c3: #10b981;
+  --accent: #0891b2;
+  --accent-soft: rgba(8, 145, 178, 0.12);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------- 页面骨架 ---------- */
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background-color: var(--bg-fallback); /* 兜底底色，实际背景由 .bg-layer 呈现 */
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+               'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app {
+  position: relative;
+  z-index: 2; /* 压在背景层与粒子层之上 */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+}
+
+/* ---------- 背景层 ---------- */
+/*
+  两套渐变各占一层，靠 opacity 交叉淡化完成阶段过渡。
+  渐变画在 CSS 里而不是 canvas 里：opacity 过渡是 GPU 合成的，零 JS；
+  若画进 canvas 则需每帧重建 gradient 并手动插值颜色。
+*/
+.bg-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  opacity: 0;
+  transition: opacity 700ms ease;
+  pointer-events: none;
+}
+
+.bg-layer--focus {
+  background: radial-gradient(circle at 50% 45%,
+    var(--bg-focus-in) 0%, var(--bg-focus-mid) 55%, var(--bg-focus-out) 100%);
+}
+
+.bg-layer--rest {
+  background: radial-gradient(circle at 50% 45%,
+    var(--bg-rest-in) 0%, var(--bg-rest-mid) 55%, var(--bg-rest-out) 100%);
+}
+
+body.is-focus .bg-layer--focus { opacity: 1; }
+body.is-rest .bg-layer--rest { opacity: 1; }
+
+#bg {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.status {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: var(--accent);
+  transition: color 400ms ease;
+}
+
+/* ---------- 圆环 ---------- */
+.ring {
+  --angle: 360deg; /* JS 执行前的默认值，避免 mask 因变量未定义而失效 */
+  position: relative;
+  width: var(--ring-size);
+  height: var(--ring-size);
+  /* 让内部文字用 cqw 随圆环等比缩放 */
+  container-type: size;
+}
+
+/*
+  锥形环绕渐变 + 双层 mask 复合。
+
+  渐变本身是静止的、颜色固定在圆周方位上；「挖空中心」和「截断已过去的部分」
+  两件事都交给 mask 做交集。这样 JS 每个 tick 只需要改 --angle 一个变量。
+*/
+.ring__track {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg,
+    var(--ring-c1) 0%,
+    var(--ring-c2) 33%,
+    var(--ring-c3) 66%,
+    var(--ring-c1) 100%);
+
+  mask-image:
+    radial-gradient(farthest-side, #0000 calc(100% - var(--ring-w)), #000 0),
+    conic-gradient(from 0deg, #000 0 var(--angle), #0000 var(--angle) 360deg);
+  mask-composite: intersect;
+
+  -webkit-mask-image:
+    radial-gradient(farthest-side, #0000 calc(100% - var(--ring-w)), #000 0),
+    conic-gradient(from 0deg, #000 0 var(--angle), #0000 var(--angle) 360deg);
+  -webkit-mask-composite: source-in;
+}
+
+.ring__face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42em;
+  font-size: 19cqw;
+  pointer-events: none;
+}
+
+.ring__clock {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 1em;
+  font-weight: 300;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.ring__speed {
+  font-size: 0.26em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.3em 0.8em;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ---------- 按钮 ---------- */
+.controls {
+  /* 作为流速面板的定位参照。面板锚在整行而不是按钮上 —— 按钮换行后会居中，
+     再按 right:0 锚定就会越出屏幕左缘。 */
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.btn {
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--fg);
+  cursor: pointer;
+  transition: background-color 200ms ease, border-color 200ms ease,
+              color 200ms ease, transform 100ms ease;
+}
+
+.btn:hover { border-color: var(--accent); }
+.btn:active { transform: scale(0.97); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.btn--primary {
+  min-width: 108px;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.btn--icon {
+  min-width: 48px;
+  padding: 10px 0;
+  font-size: 17px;
+  line-height: 1;
+}
+
+/* ---------- 主题切换 ---------- */
+/* 固定在角上，不占 .controls 那行的位置：窄屏下那行本来就会换行 */
+.theme-toggle {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 3;
+}
+
+/*
+  图标交给 CSS 而不是 JS 写 textContent —— 内联脚本已经定好 data-theme，
+  这样首屏直接渲染正确的那一个，不会先闪一下另一个。
+*/
+.theme-toggle::before { content: '☀️'; }
+:root[data-theme='light'] .theme-toggle::before { content: '🌙'; }
+
+/* ---------- 流速面板 ---------- */
+.speed__panel {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(100% + 10px);
+  z-index: 10;
+  /* 钳制在视口内，任何宽度下都不会横向溢出 */
+  width: min(260px, calc(100vw - 48px));
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--panel-shadow);
+}
+
+/* 需要比 .speed__panel 的 display 更高优先级才能生效 */
+.speed__panel[hidden] { display: none; }
+
+.speed__label {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--fg-dim);
+}
+
+.speed__label strong {
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.speed__range {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.speed__presets {
+  display: flex;
+  gap: 6px;
+}
+
+.preset {
+  flex: 1;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease, background-color 160ms ease;
+}
+
+.preset:hover { color: var(--fg); border-color: var(--accent); }
+.preset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.preset.is-active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* ---------- 今日统计 ---------- */
+.stats {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim);
+}
+
+.stats strong {
+  margin: 0 3px;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  transition: color 400ms ease;
+}

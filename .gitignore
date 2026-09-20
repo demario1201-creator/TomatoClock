@@ -1,0 +1,10 @@
+# 环境变量 / 密钥，一律不进仓库
+.env
+.env.*
+!.env.example
+
+# 本机专属配置（含本机绝对路径，不适合公开）
+.claude/settings.local.json
+
+# 系统垃圾文件
+.DS_Store

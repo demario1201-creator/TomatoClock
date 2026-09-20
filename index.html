@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>番茄钟</title>
+  <script>
+    /*
+      首屏防闪烁：必须在样式表之前同步定好主题，否则浅色用户会先看到一帧深色。
+      键名与 script.js 里的 THEME_STORAGE_KEY 保持一致。
+    */
+    (function () {
+      var theme;
+      try {
+        var stored = localStorage.getItem('pomodoro.theme');
+        theme = (stored === 'light' || stored === 'dark')
+          ? stored
+          : (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      } catch (error) {
+        theme = 'dark';
+      }
+      document.documentElement.dataset.theme = theme;
+    })();
+  </script>
+  <link rel="stylesheet" href="style.css">
+  <script src="background.js" defer></script>
+  <script src="script.js" defer></script>
+</head>
+<body class="is-focus">
+  <div class="bg-layer bg-layer--focus"></div>
+  <div class="bg-layer bg-layer--rest"></div>
+  <canvas id="bg" aria-hidden="true"></canvas>
+
+  <button type="button" id="themeBtn" class="btn btn--icon theme-toggle"
+          aria-label="切换到浅色模式" aria-pressed="false"></button>
+
+  <main class="app">
+    <p class="status" id="status">专注中</p>
+
+    <div class="ring" id="ring">
+      <div class="ring__track"></div>
+      <div class="ring__face">
+        <span class="ring__clock" id="time">25:00</span>
+        <span class="ring__speed" id="speedBadge" hidden></span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button type="button" id="toggleBtn" class="btn btn--primary">开始</button>
+      <button type="button" id="resetBtn" class="btn">重置</button>
+      <button type="button" id="muteBtn" class="btn btn--icon" aria-label="关闭提示音" aria-pressed="false">🔔</button>
+
+      <div class="speed">
+        <button type="button" id="speedBtn" class="btn" aria-expanded="false" aria-controls="speedPanel">设置流速</button>
+        <div class="speed__panel" id="speedPanel" hidden>
+          <p class="speed__label">时间流速 <strong id="speedValue">1×</strong></p>
+          <input type="range" id="speedRange" class="speed__range"
+                 min="1" max="100" step="1" value="1"
+                 aria-label="时间流速倍数">
+          <div class="speed__presets" id="speedPresets"></div>
+        </div>
+      </div>
+    </div>
+
+    <p class="stats" id="stats" aria-live="polite">
+      今日完成 <strong id="statsCount">0</strong> 个番茄
+    </p>
+  </main>
+</body>
+</html>
